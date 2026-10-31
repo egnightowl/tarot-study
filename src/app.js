@@ -41,7 +41,9 @@ async function imageUrl(name) {
 function hydrateImages(root) {
   root.querySelectorAll('[data-img]').forEach(async (el) => {
     const url = await imageUrl(el.dataset.img);
-    if (url) el.innerHTML = `<img src="${url}" alt="" loading="lazy">`;
+    if (!url) return;
+    el.innerHTML = `<img src="${url}" alt="" loading="lazy">`;
+    el.closest('.tarot')?.classList.add('has-img');
   });
 }
 
