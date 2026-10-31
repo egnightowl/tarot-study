@@ -1,0 +1,15 @@
+# 비밀: 접속코드와 평문 결과물은 절대 올리지 않는다
+ACCESS_CODE.txt
+parse-report.md
+node_modules/
+.DS_Store
+
+# 공개 저장소에는 암호화된 결과물(gh-pages 브랜치)만 올라간다.
+# 평문 내용과 이미지 원본은 로컬에만 둔다.
+content/
+assets/images/
+assets/credits.json
+dist/
+illustration-list.md
+docs/references/
+BRIEF.md

@@ -1,0 +1,12 @@
+{
+  "name": "tarot-study",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "new-code": "node scripts/build.mjs --new-code",
+    "serve": "node scripts/serve.mjs",
+    "dev": "node scripts/build.mjs && node scripts/serve.mjs",
+    "deploy": "sh scripts/deploy.sh"
+  }
+}
