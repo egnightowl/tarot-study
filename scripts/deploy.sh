@@ -4,6 +4,7 @@
 set -e
 cd "$(dirname "$0")/.."
 REMOTE=$(git remote get-url origin)
+sh scripts/shrink-images.sh
 node scripts/build.mjs
 # 평문 내용이 dist/ 에 섞이지 않았는지 마지막으로 확인
 if grep -rqs "한 줄 정의\|ACCESS_CODE" dist/*.json dist/*.bin 2>/dev/null; then echo "! dist/ 에 평문이 있습니다. 배포를 멈춥니다."; exit 1; fi
