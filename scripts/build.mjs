@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, readdirSync, cpSync, statSync } from 'node:fs';
 import { join, extname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomBytes, randomInt, pbkdf2Sync, createCipheriv, createHash } from 'node:crypto';
+import { randomBytes, randomInt, pbkdf2Sync, createCipheriv, createHash, createHmac } from 'node:crypto';
 import { parseContent } from './parse.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -30,8 +30,10 @@ function readOrCreateCode() {
   return { code, created: true };
 }
 
+// IV는 내용에서 만든다(HMAC). 같은 그림은 늘 같은 암호문이 되어, 배포 때 바뀐 파일만 올라간다.
+// 내용이 다르면 IV도 달라지므로 같은 키·IV를 다른 내용에 다시 쓰는 일은 없다.
 const seal = (key, buf) => {
-  const iv = randomBytes(12);
+  const iv = createHmac('sha256', key).update(buf).digest().subarray(0, 12);
   const c = createCipheriv('aes-256-gcm', key, iv);
   return Buffer.concat([iv, c.update(buf), c.final(), c.getAuthTag()]);
 };
@@ -41,7 +43,10 @@ const FONT_EXT = ['.woff2', '.woff', '.otf', '.ttf'];
 
 function main() {
   const { code, created } = readOrCreateCode();
-  const salt = randomBytes(16);
+  // 솔트도 접속코드처럼 유지한다(.build-salt, git 제외). 새 코드를 만들면 솔트도 새로.
+  const SALT_FILE = CODE_FILE.replace(/[^/]+$/, '.build-salt');
+  if (created || !existsSync(SALT_FILE)) writeFileSync(SALT_FILE, randomBytes(16).toString('base64'), { mode: 0o600 });
+  const salt = Buffer.from(readFileSync(SALT_FILE, 'utf8').trim(), 'base64');
   const key = pbkdf2Sync(normalize(code), salt, ITER, 32, 'sha256');
 
   const content = parseContent(at('content'));

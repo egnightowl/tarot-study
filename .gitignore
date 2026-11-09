@@ -15,3 +15,5 @@ docs/references/
 BRIEF.md
 illustration-prompts.md
 assets/images-originals/
+.build-salt
+.deploy/
