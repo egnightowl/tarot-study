@@ -100,42 +100,49 @@ function writeReport({ cards, flags }) {
 }
 
 // ChatGPT가 그릴 삽화 목록 (로컬 전용, git 제외)
-// GPT 이미지 요청문: 첫 메시지(화풍·인물 고정)는 한 번만, 그다음은 남은 장면을 한 줄씩 보낸다 (토큰 절약)
-const ILL_STYLES = {
-  romance: { tag: 'A', title: '로판 (로맨스 판타지)' },
-  blog: { tag: 'B', title: '역사 블로그' },
-};
+// GPT 이미지 요청문 (토큰 절약 + 인물 붕괴 방지)
+// 로판: 대화 하나에 5장씩만 그리고 새 대화로 넘어간다. 줄마다 짧은 인물 고정 문구를 붙여, 대화가 길어져도 생김새가 흐려지지 않게 한다.
+const ROMANCE_ANCHOR = '고정: 세미=짙은 갈색 웨이브 단발·앞머리·크림 블라우스·버건디 리본 / 피터=짙은 초록 머리(갈색 아님)·뾰족 귀·무지갯빛 투명 날개·녹색 금장 망토 / 빛·시간은 장면대로';
+const ROMANCE_BATCH = 5;
+const ROMANCE_START = `캐릭터 시트와 화풍 스케치를 첨부했어요. 질문·설명 없이 이미지만 주세요.
+규칙: 가로 4:3 / 글자·로고 없음 / 화풍은 화풍 스케치, 인물 얼굴·머리·옷은 캐릭터 시트와 똑같이 / 주인공 2명 외 인물은 3명 이하, 작게 / 카드 속 장면은 1909년 라이더 웨이트 스미스 구도 / 스케치의 노을빛은 화풍 참고일 뿐, 빛과 시간대는 장면 설명을 따름.
+제가 "A 파일명 | 장면 | 고정"을 보내면 그 한 장만 그려 주세요.`;
+const BLOG_START = `화풍 스케치를 첨부했어요. 질문·설명 없이 이미지만 주세요.
+규칙: 가로 4:3 / 빈티지 판화 콜라주, 찢긴 종이 가장자리, 세피아에 버건디·녹색 / 손으로 그린 화살표·동그라미는 되지만 글자는 넣지 않음 / 카드 그림은 1909년 라이더 웨이트 스미스 구도.
+제가 "B 파일명: 장면"을 보내면 그 한 장만 그려 주세요.`;
+const block = (t) => '```\n' + t + '\n```\n';
 function writeIllustrationPrompts(ills, images) {
   const todo = ills.filter((x) => !images[x.name]);
-  const groups = Object.entries(ILL_STYLES).map(([k, st]) => {
-    const rows = todo.filter((x) => x.name.startsWith(`ill-${k}-`));
-    return rows.length ? `## ${st.tag} · ${st.title} — ${rows.length}장\n\n\`\`\`\n${rows.map((x) => `${st.tag} ${x.name}: ${x.desc}`).join('\n')}\n\`\`\`\n` : '';
-  }).join('\n');
-  const left = todo.filter((x) => Object.keys(ILL_STYLES).some((k) => x.name.startsWith(`ill-${k}-`))).length;
-  writeFileSync(at('illustration-prompts.md'), `# GPT 삽화 요청문 (남은 ${left}장)
+  const rom = todo.filter((x) => x.name.startsWith('ill-romance-'));
+  const blog = todo.filter((x) => x.name.startsWith('ill-blog-'));
+  const batches = [];
+  for (let i = 0; i < rom.length; i += ROMANCE_BATCH) batches.push(rom.slice(i, i + ROMANCE_BATCH));
+  const romMd = batches.map((b, i) => `### 로판 ${i + 1}번째 대화 (${b.length}장) — 새 대화 + 캐릭터 시트·화풍 스케치 첨부 + 시작 메시지\n\n` +
+    b.map((x) => block(`A ${x.name} | ${x.desc} | ${ROMANCE_ANCHOR}`)).join('\n')).join('\n');
+  writeFileSync(at('illustration-prompts.md'), `# GPT 삽화 요청문 (남은 로판 ${rom.length}장 · 블로그 ${blog.length}장)
 
-빌드할 때마다 새로 만들어져요. 이미 그림이 있는 장면은 빠집니다.
+빌드할 때마다 새로 만들어져요. \`assets/images/\`에 그림이 들어간 장면은 빠집니다.
 
-## 쓰는 법
+**저장할 때 파일 이름은 줄 앞의 \`A \`·\`B \`를 빼고** \`ill-…\`부터 적어요. 예: \`A ill-romance-major-15\` → \`ill-romance-major-15.png\`
 
-1. 새 대화를 열고 화풍 스케치 2장(\`docs/references/STYLE-A-romance.webp\`, \`STYLE-B-blog.webp\`)을 첨부한 뒤 **첫 메시지**를 보내요. 한 대화에 한 번만요.
-2. 그다음엔 아래 목록에서 **한 줄씩** 복사해 보내요. 한 줄 = 그림 한 장.
-3. 받은 그림은 줄 맨 앞의 파일 이름(예: \`ill-romance-major-00\`)에 \`.webp\`·\`.png\`·\`.jpg\` 중 하나를 붙여 \`assets/images/\`에 저장하고 \`npm run deploy\` 하면 돼요.
-4. 인물 얼굴이 흔들리기 시작하면 새 대화에서 1번부터 다시 해요(대화가 길수록 토큰도 많이 들어요).
+## 로판 (A) — 인물 붕괴를 줄이는 방법
 
-## 첫 메시지 (스케치 2장 첨부해서 한 번만)
+1. **캐릭터 시트 먼저 한 장** (처음 한 번만). 지금까지 그린 그림 중 세미와 피터가 가장 마음에 드는 한 장을 첨부하고 아래를 보내요. 결과를 \`docs/references/CHARACTER-SHEET.png\`로 저장해 두세요.
+${block(`첨부한 그림의 두 인물로 캐릭터 시트를 만들어 주세요. 흰 배경, 가로 4:3, 글자 없음. 왼쪽 세미, 오른쪽 피터. 각각 정면 전신 1개와 얼굴 클로즈업 1개.
+세미: 20대 한국 여성, 짙은 갈색 웨이브 단발과 앞머리, 크림색 블라우스, 버건디 리본, 버건디 치마.
+피터: 키 큰 요정 청년, 짙은 초록 머리(갈색 아님), 뾰족한 귀, 무지갯빛 투명 날개, 녹색에 금장식 망토.`)}
+2. **대화 하나에 5장까지만.** 아래 묶음마다 새 대화를 열고, **캐릭터 시트 + STYLE-A 스케치** 두 장을 첨부해 시작 메시지를 보낸 다음 묶음 안의 줄을 하나씩 보내요.
+3. 시작 메시지 (묶음마다 같아요)
+${block(ROMANCE_START)}
+4. 그림이 흔들리면 다시 그려 달라고 말하지 말고, **그 줄을 새 대화에서** 다시 보내요. 고쳐 달라는 대화가 쌓일수록 더 무너져요.
 
-\`\`\`
-타로 이야기 삽화를 그려요. 질문·설명 없이 이미지만 주세요.
-공통: 가로 4:3, 글자·로고·워터마크 없음. 카드 속 그림은 1909년 라이더 웨이트 스미스 구도.
-A = 첫 번째 첨부 화풍. 로판 웹소설 삽화, 따뜻한 역광, 섬세한 디지털 페인팅. 인물 고정:
-- 세미: 20대 한국 여성, 어깨 길이 짙은 갈색 웨이브 단발과 앞머리, 크림색 블라우스·버건디 리본·버건디 치마(카드 장면에선 그 카드 옷차림 가능)
-- 피터: 키 큰 요정 청년, 짙은 녹색 머리, 뾰족한 귀, 반투명 무지갯빛 날개, 녹색·금장 망토
-B = 두 번째 첨부 화풍. 빈티지 판화 콜라주, 찢긴 종이 가장자리, 세피아에 버건디·녹색, 손으로 그린 화살표·동그라미(글자는 넣지 않음).
-제가 "A 파일명: 장면" 또는 "B 파일명: 장면"을 보내면 그 한 장만 그려 주세요.
-\`\`\`
+${romMd}
+## 역사 블로그 (B)
 
-${groups}`);
+블로그는 인물이 반복되지 않아서 붕괴가 적어요. STYLE-B 스케치를 첨부하고 시작 메시지 한 번, 그다음 한 줄씩 보내요. 10장쯤마다 새 대화로 바꾸면 좋아요.
+
+${block(BLOG_START)}
+${block(blog.map((x) => `B ${x.name}: ${x.desc}`).join('\n'))}`);
 }
 
 function writeIllustrationList(ills, images) {
