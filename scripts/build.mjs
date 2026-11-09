@@ -85,6 +85,7 @@ function main() {
 
   writeReport(content);
   writeIllustrationList(content.ills, images);
+  writeIllustrationPrompts(content.ills, images);
   const learned = content.cards.filter((c) => c.status === 'learned').length;
   console.log(`✓ 카드 ${learned}/78장, 이야기 ${content.stories.length}편, 노트 ${content.notes.length}개, 이미지 ${Object.keys(images).length}개 → dist/ (암호화됨)`);
   console.log(created ? `✓ 새 접속코드를 만들었습니다 → ACCESS_CODE.txt` : `✓ 기존 접속코드 사용 (ACCESS_CODE.txt)`);
@@ -99,6 +100,44 @@ function writeReport({ cards, flags }) {
 }
 
 // ChatGPT가 그릴 삽화 목록 (로컬 전용, git 제외)
+// GPT 이미지 요청문: 첫 메시지(화풍·인물 고정)는 한 번만, 그다음은 남은 장면을 한 줄씩 보낸다 (토큰 절약)
+const ILL_STYLES = {
+  romance: { tag: 'A', title: '로판 (로맨스 판타지)' },
+  blog: { tag: 'B', title: '역사 블로그' },
+};
+function writeIllustrationPrompts(ills, images) {
+  const todo = ills.filter((x) => !images[x.name]);
+  const groups = Object.entries(ILL_STYLES).map(([k, st]) => {
+    const rows = todo.filter((x) => x.name.startsWith(`ill-${k}-`));
+    return rows.length ? `## ${st.tag} · ${st.title} — ${rows.length}장\n\n\`\`\`\n${rows.map((x) => `${st.tag} ${x.name}: ${x.desc}`).join('\n')}\n\`\`\`\n` : '';
+  }).join('\n');
+  const left = todo.filter((x) => Object.keys(ILL_STYLES).some((k) => x.name.startsWith(`ill-${k}-`))).length;
+  writeFileSync(at('illustration-prompts.md'), `# GPT 삽화 요청문 (남은 ${left}장)
+
+빌드할 때마다 새로 만들어져요. 이미 그림이 있는 장면은 빠집니다.
+
+## 쓰는 법
+
+1. 새 대화를 열고 화풍 스케치 2장(\`docs/references/STYLE-A-romance.webp\`, \`STYLE-B-blog.webp\`)을 첨부한 뒤 **첫 메시지**를 보내요. 한 대화에 한 번만요.
+2. 그다음엔 아래 목록에서 **한 줄씩** 복사해 보내요. 한 줄 = 그림 한 장.
+3. 받은 그림은 줄 맨 앞의 파일 이름(예: \`ill-romance-major-00\`)에 \`.webp\`·\`.png\`·\`.jpg\` 중 하나를 붙여 \`assets/images/\`에 저장하고 \`npm run deploy\` 하면 돼요.
+4. 인물 얼굴이 흔들리기 시작하면 새 대화에서 1번부터 다시 해요(대화가 길수록 토큰도 많이 들어요).
+
+## 첫 메시지 (스케치 2장 첨부해서 한 번만)
+
+\`\`\`
+타로 이야기 삽화를 그려요. 질문·설명 없이 이미지만 주세요.
+공통: 가로 4:3, 글자·로고·워터마크 없음. 카드 속 그림은 1909년 라이더 웨이트 스미스 구도.
+A = 첫 번째 첨부 화풍. 로판 웹소설 삽화, 따뜻한 역광, 섬세한 디지털 페인팅. 인물 고정:
+- 세미: 20대 한국 여성, 어깨 길이 짙은 갈색 웨이브 단발과 앞머리, 크림색 블라우스·버건디 리본·버건디 치마(카드 장면에선 그 카드 옷차림 가능)
+- 피터: 키 큰 요정 청년, 짙은 녹색 머리, 뾰족한 귀, 반투명 무지갯빛 날개, 녹색·금장 망토
+B = 두 번째 첨부 화풍. 빈티지 판화 콜라주, 찢긴 종이 가장자리, 세피아에 버건디·녹색, 손으로 그린 화살표·동그라미(글자는 넣지 않음).
+제가 "A 파일명: 장면" 또는 "B 파일명: 장면"을 보내면 그 한 장만 그려 주세요.
+\`\`\`
+
+${groups}`);
+}
+
 function writeIllustrationList(ills, images) {
   const done = ills.filter((x) => images[x.name]).length;
   const rows = ills.map((x) => `| ${images[x.name] ? '✅' : '⬜'} | \`${x.name}.webp\` | ${x.story} · ${x.chapter} | ${x.desc.replace(/\|/g, '\\|')} |`);
