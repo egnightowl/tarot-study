@@ -276,8 +276,8 @@ th { background: var(--paper-2); font-weight: 700; }
 
 /* ───── 이야기 버전 토글 · 마법 삼림 스위치 · 삽화 ───── */
 .story-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin: 4px 0 16px; }
-.seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--paper-2); box-shadow: inset 0 0 0 1px var(--line); }
-.seg button { border: 0; background: none; padding: 7px 14px; border-radius: 999px; cursor: pointer; font-size: 14.5px; color: var(--muted); transition: background .25s, color .25s; }
+.seg { display: inline-flex; max-width: 100%; overflow-x: auto; scrollbar-width: none; padding: 3px; border-radius: 999px; background: var(--paper-2); box-shadow: inset 0 0 0 1px var(--line); }
+.seg button { flex: none; white-space: nowrap; border: 0; background: none; padding: 7px 14px; border-radius: 999px; cursor: pointer; font-size: 14.5px; color: var(--muted); transition: background .25s, color .25s; }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--paper); box-shadow: 0 4px 12px -6px var(--accent); }
 .switch { display: inline-flex; align-items: center; gap: 8px; font-size: 14.5px; cursor: pointer; user-select: none; }
 .switch input { appearance: none; width: 40px; height: 23px; border-radius: 99px; background: var(--line); position: relative; cursor: pointer; transition: background .25s; margin: 0; }
@@ -293,5 +293,15 @@ figure.ill img { width: 100%; border-radius: 12px; box-shadow: var(--shadow); di
 .ill-ph small { font-family: monospace; font-size: 11px; opacity: .7; }
 .story.blog { font-size: 16.5px; line-height: 1.9; }
 .story.blog p { text-indent: 0; }
-.story.romance p { text-indent: 0; }
-.no-forest blockquote.forest, .no-forest .forest-only { display: none; }
+.story.romance p, .story.crows p { text-indent: 0; }
+.story.crows h2 { font-family: var(--font-display); letter-spacing: .02em; }
+.no-forest blockquote.forest, .no-forest .forest-only, .no-crows .crows-only { display: none !important; }
+.deck-switches { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.fold-sub { color: var(--muted); font-size: 13px; font-family: var(--font-body); }
+/* 머더 오브 크로우: 누렇게 바랜 종이 위 검은 잉크 */
+blockquote.crows, .crows-body { --crow-paper: #ebe0c8; --crow-ink: #1d1916; }
+blockquote.crows { background: var(--crow-paper) var(--grain); color: var(--crow-ink); border: 1px solid #1d1916; box-shadow: 3px 3px 0 #1d1916; }
+blockquote.crows strong { color: #000; }
+.switch input[data-deck="crows"]:checked { background: #2a2420; }
+.crows-body h3 { font-size: 17px; }
+.deck-list .result p { font-family: var(--font-display); }

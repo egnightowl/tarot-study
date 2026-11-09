@@ -131,6 +131,36 @@ export function parseContent(dir) {
   }
   const appendixHtml = existsSync(join(dir, 'appendix-missed.md')) ? render(read('appendix-missed.md')) : '';
 
+  // deck-<이름>.md: 다른 덱 비교 노트 (예: deck-crows.md = 머더 오브 크로우)
+  // "### 0 바보 — 부제" 처럼 번호로 시작하는 소제목 = 메이저, "### 완드 에이스 — 부제" = 마이너
+  const decks = [];
+  for (const f of readdirSync(dir).filter((f) => /^deck-[a-z]+\.md$/.test(f))) {
+    const key = f.replace(/^deck-|\.md$/g, '');
+    const md = read(f);
+    const title = (md.match(/^# (.*)$/m) || [, key])[1].trim();
+    const at = md.search(/^## 카드별 정리/m);
+    const introMd = (at >= 0 ? md.slice(0, at) : md).replace(/^# .*$/m, '');
+    let count = 0;
+    if (at >= 0) {
+      for (const block of md.slice(at).split(/\n(?=### )/).filter((b) => b.startsWith('### '))) {
+        const head = block.match(/^### (.*)$/m)[1].trim();
+        const [name, sub = ''] = head.split(' — ');
+        let card = null;
+        const num = name.match(/^(\d+)\s/);
+        if (num) card = byId[`major-${pad(+num[1])}`];
+        else {
+          const [sk, rk] = name.split(/\s+/);
+          if (SUIT_BY_KO[sk] && RANKS.includes(rk)) card = byId[`${SUIT_BY_KO[sk]}-${pad(RANKS.indexOf(rk) + 1)}`];
+        }
+        if (!card) continue;
+        card.decks = card.decks || {};
+        card.decks[key] = { name: name.replace(/^\d+\s+/, ''), sub, html: render(block.replace(/^### .*$/m, '').replace(/\n---\s*$/, '')) };
+        count++;
+      }
+    }
+    decks.push({ key, title, introHtml: render(introMd), text: toText(md), count });
+  }
+
   // 노트 모음: 한 줄 정의 표만 빼고 섹션별로
   const noteSections = [];
   let cur = null;
@@ -147,5 +177,5 @@ export function parseContent(dir) {
     .filter((n) => n.md.replace(/^###.*$/gm, '').trim())
     .map((n, i) => ({ id: `n${i}`, title: n.title, html: render(n.md), text: toText(n.md) }));
 
-  return { cards, stories, appendixHtml, notes, flags, ills };
+  return { cards, stories, appendixHtml, notes, decks, flags, ills };
 }

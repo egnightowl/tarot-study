@@ -28,6 +28,7 @@ async function unlock(code) {
   KEY = key;
   DATA = JSON.parse(new TextDecoder().decode(plain));
   DATA.byId = Object.fromEntries(DATA.cards.map((c) => [c.id, c]));
+  initVersions();
 }
 
 const imgCache = {};
@@ -131,18 +132,31 @@ function showIntro() {
 }
 
 // ───── 이야기 버전 · 마법 삼림 설정 ─────
-const VERSIONS = [['romance', '로맨스 판타지'], ['blog', '역사 블로그']];
+// 이야기 버전: content/story-<수트>.<버전>.md 가 있으면 토글에 나타난다
+const VERSION_LABELS = { romance: '로맨스 판타지', crows: '까마귀 로판', blog: '역사 블로그', priceoflove: '사랑의 값 로판', childhood: '차일드후드 로판' };
+let VERSIONS = Object.entries(VERSION_LABELS).slice(0, 2);
+const initVersions = () => {
+  const have = new Set(DATA.stories.flatMap((s) => Object.keys(s.versions)).filter((v) => v !== 'original'));
+  VERSIONS = [...Object.keys(VERSION_LABELS).filter((k) => have.has(k)), ...[...have].filter((k) => !VERSION_LABELS[k])].map((k) => [k, VERSION_LABELS[k] || k]);
+};
 const getVer = () => store.get('ver', 'romance');
-const forestOn = () => store.get('forest', true);
-const applyForest = () => document.body.classList.toggle('no-forest', !forestOn());
-const forestSwitch = () => `<label class="switch"><input type="checkbox" data-forest ${forestOn() ? 'checked' : ''}> 🐾 마법 삼림 해석</label>`;
+// 고른 버전이 없는 수트는 로맨스 판타지 → 강의 원본 순서로 대신 보여 준다
+const pickVersion = (st) => st.versions[getVer()] || st.versions.romance || st.versions.original || Object.values(st.versions)[0];
+// 비교 덱: 켜고 끌 수 있는 해석 블록 (forest = 이야기 속 🐾 블록, 나머지 = content/deck-<key>.md)
+const DECKS = { forest: { icon: '🐾', name: '마법 삼림' }, crows: { icon: '🪶', name: '머더 오브 크로우' } };
+const deckOn = (k) => store.get(k === 'forest' ? 'forest' : `deck:${k}`, true);
+const applyDecks = () => Object.keys(DECKS).forEach((k) => document.body.classList.toggle(`no-${k}`, !deckOn(k)));
+const deckSwitch = (k) => `<label class="switch"><input type="checkbox" data-deck="${k}" ${deckOn(k) ? 'checked' : ''}> ${DECKS[k].icon} ${DECKS[k].name} 해석</label>`;
+const deckSwitches = (keys = Object.keys(DECKS)) => `<div class="deck-switches">${keys.map(deckSwitch).join('')}</div>`;
 document.addEventListener('change', (e) => {
-  if (e.target.matches('[data-forest]')) {
-    store.set('forest', e.target.checked);
-    document.querySelectorAll('[data-forest]').forEach((x) => (x.checked = e.target.checked));
-    applyForest();
-  }
+  const k = e.target.dataset?.deck;
+  if (!k) return;
+  store.set(k === 'forest' ? 'forest' : `deck:${k}`, e.target.checked);
+  document.querySelectorAll(`[data-deck="${k}"]`).forEach((x) => (x.checked = e.target.checked));
+  applyDecks();
 });
+const crowsBlock = (card) => card?.decks?.crows
+  ? `<blockquote class="crows crows-only"><p><strong>🪶 머더 오브 크로우에서는</strong> · ${esc(card.decks.crows.name)} — ${esc(card.decks.crows.sub)}</p>${card.decks.crows.html}</blockquote>` : '';
 
 // ───── 카드 정보 ─────
 const SUIT = {
@@ -169,7 +183,7 @@ function tile(c, href = `#/card/${c.id}`) {
 // ───── 목차 (상단 메뉴에서 여는 인덱스) ─────
 function buildIndex() {
   const count = (s) => `${cardsIn(s).filter((c) => c.status === 'learned').length}/${cardsIn(s).length}`;
-  const stories = DATA.stories.map((st) => { const v = st.versions[getVer()] || st.versions.original || Object.values(st.versions)[0];
+  const stories = DATA.stories.map((st) => { const v = pickVersion(st);
     return `<details><summary><span class="ix-ico">☾</span>${esc(v.title.split(' — ')[0])}</summary>
       <div class="ix-sub">${v.chapters.map((ch) => `<a href="#/story/${st.key}/${ch.idx}">${esc(ch.heading.split(' — ')[0])}</a>`).join('')}</div></details>`; }).join('');
   $('#index').innerHTML = `
@@ -189,12 +203,13 @@ function buildIndex() {
     <div class="ix-group"><p class="ix-title">NOTES</p>
       <details><summary><span class="ix-ico">✎</span>노트 모음</summary>
       <div class="ix-sub">${DATA.notes.map((n) => `<a href="#/notes/${n.id}">${esc(n.title)}</a>`).join('')}<a href="#/appendix">부록 — 놓친 해석</a></div></details>
+      ${(DATA.decks || []).map((d) => `<a class="ix-link" href="#/deck/${d.key}"><span class="ix-ico">${DECKS[d.key]?.icon || '✦'}</span>${esc(d.title.split(' — ')[0])}<span class="ix-count">${d.count}장</span></a>`).join('')}
       <a class="ix-link" href="#/search"><span class="ix-ico">⌕</span>검색</a>
       <a class="ix-link" href="#/credits"><span class="ix-ico">©</span>이미지 출처</a></div>
     <div class="ix-group"><p class="ix-title">SETTINGS</p>
       <div style="display:grid;gap:10px;padding:6px 10px">
         <div class="seg" role="group" aria-label="이야기 버전">${VERSIONS.map(([k, l]) => `<button type="button" data-ver="${k}" aria-pressed="${k === getVer()}">${l}</button>`).join('')}</div>
-        ${forestSwitch()}</div></div>
+        ${deckSwitches()}</div></div>
     <div class="ix-tools"><button type="button" id="theme-btn">밝게 / 어둡게</button><button type="button" id="lock-btn">잠그기</button></div>`;
   $('#theme-btn').onclick = () => {
     const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
@@ -258,7 +273,9 @@ const views = {
       ${c.status === 'upcoming' ? `<div class="panel soon"><div class="glyph">⏳</div><h2>곧 배울 카드</h2><p class="page-sub">아직 공부하지 않은 카드예요. 노트가 생기면 여기에 바로 채워 둘게요.</p></div>` : `
       <p class="definition panel">${esc(c.definition)}</p>
       ${c.notes ? `<details class="fold panel" open><summary>📝 강의 메모 <small style="color:var(--muted);font-size:13px">웨이트 키워드 · 역방향 · 보완</small></summary><div class="fold-body memo">${memo(c.notes)}</div></details>` : ''}
-      ${c.forestHtml ? `<div style="margin-top:14px">${forestSwitch()}</div><details class="fold panel forest-only" open><summary>🐾 마법 삼림에서는</summary><div class="fold-body">${c.forestHtml}</div></details>` : ''}
+      ${c.forestHtml || c.decks ? `<div style="margin-top:14px">${deckSwitches(Object.keys(DECKS).filter((k) => (k === 'forest' ? c.forestHtml : c.decks?.[k])))}</div>` : ''}
+      ${c.forestHtml ? `<details class="fold panel forest-only" open><summary>🐾 마법 삼림에서는</summary><div class="fold-body">${c.forestHtml}</div></details>` : ''}
+      ${c.decks?.crows ? `<details class="fold panel crows-only" open><summary>🪶 머더 오브 크로우 <small class="fold-sub">${esc(c.decks.crows.sub)}</small></summary><div class="fold-body prose crows-body">${c.decks.crows.html}<a class="chapter-card-link" href="#/deck/crows">이 덱 읽는 법 →</a></div></details>` : ''}
       ${c.appendixHtml ? `<details class="fold panel"><summary>🔎 놓친 해석</summary><div class="fold-body prose">${c.appendixHtml}</div></details>` : ''}
       ${story ? `<a class="btn" style="margin-top:14px" href="#/story/${story.key}/${storyChapter(story, c.id)}">📖 이야기 속 이 카드의 장 →</a>` : ''}`}
       <nav class="pager"><a class="btn" href="#/card/${prev.id}">← ${esc(prev.nameKo)}</a><a class="btn" href="#/card/${next.id}">${esc(next.nameKo)} →</a></nav>`;
@@ -267,28 +284,30 @@ const views = {
   story(key = 'major', ch) {
     const st = DATA.stories.find((s) => s.key === key) || DATA.stories[0];
     const want = getVer();
-    const v = st.versions[want] || st.versions.original || Object.values(st.versions)[0];
+    const v = pickVersion(st);
     const fallback = !st.versions[want];
+    const shownAs = Object.entries(st.versions).find(([, x]) => x === v)[0];
     setTimeout(() => {
       const target = ch != null ? $(`#ch-${ch}`) : null;
       if (target) target.scrollIntoView({ block: 'start' });
       else scrollTo(0, store.get(`scroll:${st.key}:${want}`, 0));
     }, 30);
     const name = (t) => t.split(' — ')[0];
-    return `<nav class="tabs">${DATA.stories.map((s) => `<a href="#/story/${s.key}" class="${s.key === st.key ? 'on' : ''}">${esc(name((s.versions[want] || s.versions.original || Object.values(s.versions)[0]).title))}</a>`).join('')}</nav>
+    return `<nav class="tabs">${DATA.stories.map((s) => `<a href="#/story/${s.key}" class="${s.key === st.key ? 'on' : ''}">${esc(name(pickVersion(s).title))}</a>`).join('')}</nav>
       <div class="story-controls">
         <div class="seg" role="group" aria-label="이야기 버전">${VERSIONS.map(([k, l]) => `<button type="button" data-ver="${k}" aria-pressed="${k === want}">${l}</button>`).join('')}</div>
-        ${forestSwitch()}
+        ${deckSwitches()}
       </div>
-      ${fallback ? `<p class="version-note">이 버전은 아직 쓰는 중이에요. 그동안은 강의 노트의 원래 이야기를 보여 드릴게요.</p>` : ''}
+      ${fallback ? `<p class="version-note">${esc(VERSION_LABELS[want] || want)} 버전은 아직 쓰는 중이에요. 그동안은 ${shownAs === 'original' ? '강의 노트의 원래 이야기를' : `${esc(VERSION_LABELS[shownAs] || shownAs)} 버전을`} 보여 드릴게요.</p>` : ''}
       <p class="kicker">STORY</p><h1 class="page-title">${esc(v.title)}</h1>
       <div class="page-sub">${v.introHtml}</div>
       <nav class="toc panel" aria-label="장 목차">${v.chapters.map((c) => `<a href="#/story/${st.key}/${c.idx}">${esc(name(c.heading))}</a>`).join('')}</nav>
-      <article class="story ${fallback ? 'original' : want}" data-story="${st.key}:${want}">${v.chapters.map((c) => {
+      <article class="story ${shownAs}" data-story="${st.key}:${shownAs}">${v.chapters.map((c) => {
         const [a, b] = c.heading.split(' — ');
         const card = c.cardId && DATA.byId[c.cardId];
         return `<section><h2 id="ch-${c.idx}"><span class="num">${esc(a)}</span>${esc(b || a)}</h2>${c.html}
           ${card?.forestHtml ? `<blockquote class="forest">${card.forestHtml}</blockquote>` : ''}
+          ${crowsBlock(card)}
           ${card ? `<a class="chapter-card-link" href="#/card/${c.cardId}">${esc(card.nameKo)} 카드 해석 페이지 →</a>` : ''}</section>`; }).join('')}</article>`;
   },
 
@@ -297,6 +316,18 @@ const views = {
     return `<p class="kicker">NOTES</p><h1 class="page-title">노트 모음</h1>
       <nav class="toc panel">${DATA.notes.map((n) => `<a href="#/notes/${n.id}">${esc(n.title)}</a>`).join('')}<a href="#/appendix">부록 — 놓친 해석</a></nav>
       <div class="prose">${DATA.notes.map((n) => `<h2 id="${n.id}">${esc(n.title)}</h2>${n.html}`).join('<hr>')}</div>`;
+  },
+
+  deck(key = 'crows') {
+    const d = (DATA.decks || []).find((x) => x.key === key);
+    if (!d) return views.notFound();
+    const cards = DATA.cards.filter((c) => c.decks?.[key]);
+    return `<p class="kicker">DECK</p><h1 class="page-title">${esc(d.title.split(' — ')[0])}</h1>
+      <p class="page-sub">${cards.length}장의 해석이 있어요. 카드 페이지와 이야기에서 ${DECKS[key]?.icon || ''} 블록으로 함께 보여 드려요.</p>
+      ${DECKS[key] ? `<div style="margin-bottom:14px">${deckSwitch(key)}</div>` : ''}
+      <div class="panel prose crows-body">${d.introHtml}</div>
+      <h2 class="page-title" style="font-size:22px;margin-top:26px">카드별 해석</h2>
+      <div class="deck-list">${cards.map((c) => `<a class="result" href="#/card/${c.id}"><small>${numLabel(c)}</small> ${esc(c.nameKo)}<p>${esc(c.decks[key].sub)}</p></a>`).join('')}</div>`;
   },
 
   appendix() { return `<p class="kicker">APPENDIX</p><div class="prose">${DATA.appendixHtml}</div>`; },
@@ -346,7 +377,7 @@ const views = {
 
 // 지금 고른 버전에서 이 카드가 나오는 장 번호
 function storyChapter(st, id) {
-  const v = st.versions[getVer()] || st.versions.original || Object.values(st.versions)[0];
+  const v = pickVersion(st);
   return v.chapters.find((c) => c.cardId === id)?.idx ?? 0;
 }
 
@@ -366,12 +397,13 @@ function searchHtml(q) {
     return (s ? '…' : '') + esc(t.slice(s, i)) + '<mark>' + esc(t.slice(i, i + q.length)) + '</mark>' + esc(t.slice(i + q.length, i + q.length + 50)) + '…'; };
   const out = [];
   for (const c of DATA.cards) {
-    const hay = [c.nameKo, c.nameEn, c.definition, c.notes].join(' ');
+    const hay = [c.nameKo, c.nameEn, c.definition, c.notes, ...Object.values(c.decks || {}).map((d) => `${d.name} ${d.sub} ${d.html.replace(/<[^>]+>/g, ' ')}`)].join(' ');
     if (hay.toLowerCase().includes(lq)) out.push(`<a class="result" href="#/card/${c.id}"><small>CARD</small> ${esc(c.nameKo)}<p>${snip(c.nameKo.toLowerCase().includes(lq) ? c.definition : hay)}</p></a>`);
   }
   const VL = Object.fromEntries([...VERSIONS, ['original', '강의 원본']]);
   for (const s of DATA.stories) for (const [ver, v] of Object.entries(s.versions)) for (const ch of v.chapters) if ((ch.heading + ch.text).toLowerCase().includes(lq))
     out.push(`<a class="result" href="#/story/${s.key}/${ch.idx}" data-goto-ver="${ver}"><small>STORY · ${VL[ver] || ver}</small> ${esc(v.title.split(' — ')[0])} · ${esc(ch.heading)}<p>${snip(ch.text)}</p></a>`);
+  for (const d of DATA.decks || []) if (d.text.toLowerCase().includes(lq)) out.push(`<a class="result" href="#/deck/${d.key}"><small>DECK</small> ${esc(d.title)}<p>${snip(d.text)}</p></a>`);
   for (const n of DATA.notes) if (n.text.toLowerCase().includes(lq)) out.push(`<a class="result" href="#/notes/${n.id}"><small>NOTE</small> ${esc(n.title)}<p>${snip(n.text)}</p></a>`);
   return out.length ? `<p class="page-sub">${out.length}개를 찾았어요.</p>` + out.join('') : '<p class="page-sub">찾는 내용이 없어요. 다른 말로 찾아볼까요?</p>';
 }
@@ -383,7 +415,7 @@ function route() {
   closeIndex();
   if (name === 'intro') { showIntro(); return; }
   const view = $('#view');
-  const fn = { '': views.home, cards: views.cards, card: views.card, story: views.story, notes: views.notes, appendix: views.appendix, learn: views.learn,
+  const fn = { '': views.home, cards: views.cards, card: views.card, story: views.story, notes: views.notes, appendix: views.appendix, learn: views.learn, deck: views.deck,
     review: views.review, favorites: views.favorites, search: views.search, credits: views.credits }[name] || views.notFound;
   view.innerHTML = fn(a, b);
   if (!['story', 'notes'].includes(name)) scrollTo(0, 0);
@@ -424,5 +456,5 @@ $('#index-scrim').addEventListener('click', closeIndex);
 $('#index').addEventListener('click', (e) => { if (e.target.closest('a')) setTimeout(closeIndex, 0); });
 const theme = store.get('theme', null);
 if (theme) document.documentElement.dataset.theme = theme;
-applyForest();
+applyDecks();
 setupIntro();
